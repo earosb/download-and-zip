@@ -1,13 +1,16 @@
 # Download and compress
-Download multiple files concurrently and get all compress zip file, written in go lang
+Download multiple files concurrently from different clouds (aws s3, gcs, do spaces, etc) and get all compress zip file, written in go lang
+
+How to test
 
 ```
-curl http://127.0.0.1:8080?files=https://picsum.photos/200/300 --output downloads.zip
+docker run -it --rm -p 8080:8080 --name download-and-compress earosb/download-and-compress:v1.0.1
+
+curl http://127.0.0.1:8080?files=https://picsum.photos/200/300,https://picsum.photos/200/300 --output downloads.zip
 ```
 
 ## TODO
 
-- Clean downloaded fields after response
 - Validate request input
-- Download from private bucket (S3, Cloud Storage)
+- Validate env vars
 - Compress in other formats 

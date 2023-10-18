@@ -18,6 +18,9 @@ RUN go build -o ./app ./main.go
 FROM alpine:latest
 
 ENV GIN_MODE=release
+ENV USER=user
+ENV UID=1000
+
 
 RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
 

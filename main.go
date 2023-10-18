@@ -1,26 +1,31 @@
 package main
 
 import (
-	"ZipFiles/internal/utils"
 	"archive/zip"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"log"
-	"mime"
-	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"ZipFiles/internal/storage"
+	"ZipFiles/internal/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
-func main() {
-	ginHttpServer()
+type filesInput struct {
+	files string
 }
 
-func ginHttpServer() {
+func init() {
+	log.Println("Hello from init func")
+}
+
+func main() {
+	s := storage.GetStorage(os.Getenv("STORAGE_CLIENT"))
 
 	r := gin.Default()
 
@@ -29,14 +34,19 @@ func ginHttpServer() {
 		// TODO validate files input
 		queryFiles := c.Query("files")
 
+		log.Println("queryFiles", queryFiles)
+
 		files := strings.Split(queryFiles, ",")
 
-		zipFile := start(files)
+		destFolder := worker(s, files)
+		zipFile := destFolder + ".zip"
 
 		c.FileAttachment(zipFile, zipFile)
 
-		// TODO clean files
+		go cleanFiles(destFolder)
 	})
+
+	log.Printf("running get and post...")
 
 	err := r.Run()
 	if err != nil {
@@ -44,7 +54,7 @@ func ginHttpServer() {
 	}
 }
 
-func start(files []string) string {
+func worker(storageClient storage.ClientManager, files []string) string {
 	destFolder := utils.RandStringBytes(10)
 
 	if err := os.Mkdir(destFolder, os.ModePerm); err != nil {
@@ -60,7 +70,11 @@ func start(files []string) string {
 
 		go func() {
 			defer wg.Done()
-			worker(i, destFolder, files[i])
+			fmt.Printf("Worker %d starting file %s \n", i, files[i])
+
+			storageClient.Download(destFolder, files[i])
+
+			fmt.Printf("Worker %d done\n", i)
 		}()
 	}
 
@@ -70,15 +84,7 @@ func start(files []string) string {
 		log.Fatal(err)
 	}
 
-	return destFolder + ".zip"
-}
-
-func worker(id int, destFolder string, fileUrl string) {
-	fmt.Printf("Worker %d starting\n", id)
-
-	downloadFile(destFolder, fileUrl)
-
-	fmt.Printf("Worker %d done\n", id)
+	return destFolder
 }
 
 func zipSource(source, target string) error {
@@ -137,40 +143,16 @@ func zipSource(source, target string) error {
 	})
 }
 
-func downloadFile(destFolder string, fullURLFile string) {
+func cleanFiles(dest string) {
+	log.Println("cleaning files", dest)
 
-	client := http.Client{
-		CheckRedirect: func(r *http.Request, via []*http.Request) error {
-			r.URL.Opaque = r.URL.Path
-			return nil
-		},
-	}
-	// Put content on file
-	resp, err := client.Get(fullURLFile)
+	err := os.RemoveAll(dest)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
-	defer resp.Body.Close()
 
-	contentType := resp.Header.Get("Content-Type")
-	ext, err := mime.ExtensionsByType(contentType)
+	err = os.Remove(dest + ".zip")
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
-	// fmt.Println("Extension:", ext)
-
-	// fileName := destFolder + "/" + utils.RandStringBytes(8)
-	fileName := destFolder + "/" + path.Base(resp.Request.URL.String()) + "." + ext[0]
-	// fmt.Println("fileName", fileName)
-
-	file, err := os.Create(fileName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	size, err := io.Copy(file, resp.Body)
-
-	defer file.Close()
-
-	fmt.Printf("Downloaded a file %s with size %d\n", fileName, size)
 }
